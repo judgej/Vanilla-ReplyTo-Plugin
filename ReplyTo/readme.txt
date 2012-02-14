@@ -41,6 +41,24 @@ not well known. Some assumptions have been made throughout the code on various
 ways the core vanilla product works. If these assumptions are wrong, then the
 plugin may break in future vanilla versions.
 
+After posting a reply, a redirect is performed to take the user to the new
+comment. This may be an issue with embedded versions of vanilla. Once the
+methods of handling AJAX forms are more fully understood, we can try coding
+to avoid the redirect.
+
+The "Reply" button can be clicked multiple times, bringing up a new comment
+form each time. The button needs to be disabled, or at least to not attempt
+to pull up a new form if one is already present (should be easy enough in jQuery).
+Clicking the edit button more than once toggles between a form and the original
+post. It would make sense to take the same approach for usability.
+[FIXED 0.1.1]
+
+When editing a comment that is nested to any depth, upon saving the comment,
+the indent style disappears completely. Since the comment is updated in
+isolation, we do not know when its depth of indent should be, so we will
+need to save it somehow (probably at the browser) and restore the indent
+classes when the updated comment is reloaed.
+
 The hope, of course, is that vanilla will one day support structured comments
 right out the box. It's not hard, and it is very, very useful. Take a look at
 a site like reddit.com, and imagine that without comment structure. It simply

@@ -21,7 +21,11 @@ jQuery(document).ready(function($) {
       // Put spinner on end of options list.
       $(parent).find('div.Meta span:last').after('<span class="TinyProgress">&nbsp;</span>');
 
-      if ($(msg).is(':visible')) {
+      // Check if the child comment form is already open within this comment.
+      var CommentForm = $(parent).find('div.CommentForm').length;
+
+      // If the comment form is not there, then open it, otherwise close it. Simples.
+      if (!CommentForm) {
 
          $.ajax({
             type: "POST",
@@ -50,7 +54,10 @@ jQuery(document).ready(function($) {
             }
          });
       } else {
+         // Take the comment form off.
          $(parent).find('div.CommentForm').remove();
+
+         // Take the spinner off, now the form has loaded.
          $(parent).find('span.TinyProgress').remove();
          $(msg).show();
       }

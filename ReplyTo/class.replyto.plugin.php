@@ -13,17 +13,17 @@ Author Url: http://www.consil.co.uk/
  * @copyright (C) 2010 Jason Judge
  * @license GPL {@link http://www.gnu.org/licenses/gpl.html}
  * @link http://www.consil.co.uk/
- * @subpackage UserFields
- * @author Jason Judge <jason@consil.co.uk>
- * @date $Date: 2009-03-01 15:21:58 +0000 (Sun, 01 Mar 2009) $
- * @revision $Revision: 76 $
+ * @subpackage ReplyTo
+ * @author Jason Judge <jason.judge@consil.co.uk>
+ * @date $Date: $
+ * @revision $Revision: $
  */
 
 // Define the plugin:
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to to be made to a specific comment.',
-   'Version' => '0.1',
+   'Version' => '0.1.1',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
