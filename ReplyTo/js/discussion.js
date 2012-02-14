@@ -1,6 +1,18 @@
 jQuery(document).ready(function($) {
    
-/* Options */
+   // When the edit link is clicked, save the nesting level categories for
+   // restoring later, after the edited comment is submitted.
+   // TODO: now we need a trigger once the edited comment is sent back on
+   // form submission, so we can put the saved classes back onto it.
+   $('a.EditComment').livequery('click', function() {
+      var btn = this;
+      var parent = $(btn).parents('div.Comment');
+      var saveclass = $(parent).attr('class');
+      // Store it against the parent of 'parent', which does not get 
+      // removed (i.e. the list item).
+      if (saveclass != 'Comment') $(parent).parent().data('saveclass', saveclass);
+   });
+
 
    // Reply to comment
    // We want to show the comment form, but unlike editing, there is no need
@@ -40,17 +52,14 @@ jQuery(document).ready(function($) {
             success: function(json) {
                json = $.postParseJson(json);
                
+               // Place the form after the original comment and hide the spinner.
                $(msg).after(json.Data);
-               //$(msg).hide(); // Unlike editing, do not hide the original message.
                $(parent).find('span.TinyProgress').hide();               
 
                // Replace the "Back to Discussions" with a "Cancel" button.
                // There is no easy way to do it in the back end without consequences.
                // TODO: some translation would probably be needed here in the long term.
                $(parent).find('a.Back').removeClass('Back').addClass('Cancel').text('Cancel');
-
-               // TODO: remove or disable the "Reply" button so the user can not get
-               // multiple reply forms.
             }
          });
       } else {
@@ -59,10 +68,9 @@ jQuery(document).ready(function($) {
 
          // Take the spinner off, now the form has loaded.
          $(parent).find('span.TinyProgress').remove();
-         $(msg).show();
       }
       
-      $(document).trigger('CommentEditingComplete', [msg]);
+      $(document).trigger('CommentReplyingComplete', [msg]);
       return false;
    });
 

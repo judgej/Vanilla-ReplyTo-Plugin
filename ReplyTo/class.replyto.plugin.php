@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.0
+Version: 0.1.2
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -22,14 +22,14 @@ Author Url: http://www.consil.co.uk/
 // Define the plugin:
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
-   'Description' => 'Allows a reply to to be made to a specific comment.',
-   'Version' => '0.1.1',
+   'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
+   'Version' => '0.1.2',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
    'HasLocale' => FALSE,
    'RegisterPermissions' => array(),
-   'SettingsUrl' => '/dashboard/settings/replyto',
+   'SettingsUrl' => FALSE, //'/dashboard/settings/replyto',
    'SettingsPermission' => 'Garden.AdminUser.Only',
    'Author' => 'Jason Judge',
    'AuthorEmail' => 'jason.judge@consil.co.uk',
@@ -108,7 +108,8 @@ class ReplyTo extends Gdn_Plugin {
 
    // Rebuild the left/right values for a discussion.
    // We are effectively creating a nested sets model from a simple adjacency model.
-   // There are ways of doing this using temporary tables, but we will use PHP arrays.
+   // There are ways of doing this using temporary tables, but we will use PHP arrays
+   // To build the tree before using it to update the discussion comments.
 
    public function TreeWalk($ParentID, $reset_parents = NULL, $reset_index = NULL) {
       static $index = 1;
@@ -151,13 +152,8 @@ class ReplyTo extends Gdn_Plugin {
       return $return;
    }
 
-   // TODO: belongs in a model.
-
    public function RebuildLeftRight($DiscussionID) {
       // Get the base comment. Actually it is the discussion in vanilla 2.
-      // We only call it a comment for historical reasons (TODO: change this).
-      // This gives us the left and right values, used to organise the tree.
-      //$BaseComment = $this->BaseComment($DiscussionID);
 
       // Get all the comments for the discussion.
       // Order by parent and then creation date.
@@ -202,6 +198,18 @@ class ReplyTo extends Gdn_Plugin {
          ->Put();
    }
 
+   // Get the tree-related attributes of a comment.
+
+   public function GetComment($CommentID) {
+      $SQL = Gdn::SQL();
+
+      return $SQL->Select(array('DiscussionID', 'CommentID', 'ParentCommentID', 'TreeLeft', 'TreeRight'))
+         ->From('Comment')
+         ->Where('CommentID', $CommentID)
+         ->Get()
+         ->FirstRow();
+   }
+
    // Replies will always be added to the same part of the tree, i.e. as a last sibling
    // of an existing comment.
    // This function opens a gap in the left/right values in the comment tree, then returns
@@ -218,49 +226,69 @@ class ReplyTo extends Gdn_Plugin {
       // Get the current max right value.
       $MaxRight = $this->MaxRight($DiscussionID);
 
-      // If the base comment left/right does not match the comment count, then
-      // rebuild the left/right values for the entire discussion.
-      if ($MaxRight != (2 * $CommentCount)) {
-         // Rebuild. The 'right' value of the base comment should be twice the total number
-         // of comments, since with this tree model (Celko Nested Sets) we could up the left
+      // If the base comment left/right does not match the comment count (excluding the
+      // new comment we have just inserted), then rebuild the left/right values for the 
+      // entire discussion.
+      if ($MaxRight != ((2 * $CommentCount) - 2)) {
+         // Rebuild. The 'right' value of the right-most comment should be twice the total number
+         // of comments, since with this Nested Sets tree model we go up the left
          // and back down the right.
          $this->RebuildLeftRight($DiscussionID);
+
+         // Since we rebuilt the whole tree, there is no point doing the gap-opening stuff 
+         // that follows.
+         // Do not return the left/right values, since they have already been updated.
+         return;
       }
 
-      // Now we get to the task in hand: opening up a gap in the tree numbering for the new comment.
+      // Now the main task: opening up a gap in the tree numbering for the new comment.
       // We want to insert as the last child of comment $CommentID.
+      // A gap opnly needs to be opened up if this is a reply to an existing comment.
 
-      // Get the current right value of the insert point comment.
-      // It and everything above it will move up two.
-      // CHECKME: this seems a cumbersome way to get at a single comment.
-      $CommentModel = new CommentModel();
-      $CommentModel->CommentQuery();
-      $CommentModel->SQL->Where('c.CommentID', $CommentID);
-      $InsertComment = $CommentModel->SQL->Get()->FirstRow();
+      if ($CommentID > 0) {
+         // Get the right value of the new comment parent.
+         // This and everything above it will be moved up two places.
+         // The left of the new comment will be given the same value as
+         // the old right value of the parent comment.
+         // We could just rebuild the tree model, but this reduces the number
+         // of database rows that need to be updated.
 
-      // If this comment is for a different discussion, then stop now.
-      if (empty($InsertComment) || $DiscussionID != $InsertComment->DiscussionID) return;
+         $InsertComment = $this->GetComment($CommentID);
 
-      $TreeRight = (int)$InsertComment->TreeRight;
+         // If this comment is for a different discussion, then stop now.
+         if (empty($InsertComment) || $DiscussionID != $InsertComment->DiscussionID) return;
 
-      $SQL = Gdn::SQL();
+         $TreeRight = (int)$InsertComment->TreeRight;
 
-      $Update = $SQL->Update('Comment')
-         ->Where('DiscussionID', $DiscussionID)
-         ->Where('TreeRight >=', $TreeRight)
-         ->Set('TreeRight', 'TreeRight + 2', FALSE)
-         ->Put();
+         $SQL = Gdn::SQL();
 
-      $Update = $SQL->Update('Comment')
-         ->Where('DiscussionID', $DiscussionID)
-         ->Where('TreeLeft >=', $TreeRight)
-         ->Set('TreeLeft', 'TreeLeft + 2', FALSE)
-         ->Put();
+         $Update = $SQL->Update('Comment')
+            ->Where('DiscussionID', $DiscussionID)
+            ->Where('TreeRight >=', $TreeRight)
+            ->Set('TreeRight', 'TreeRight + 2', FALSE)
+            ->Put();
 
-      // Return the left/right/parent information necessary to add to the comment.
-      // The new item 'left' replaces the parent 'right', and that shifts the parent 'right' up by two.
-      return array('ParentCommentID' => $CommentID, 'TreeLeft' => $TreeRight, 'TreeRight' => $TreeRight + 1);
-     
+         $Update = $SQL->Update('Comment')
+            ->Where('DiscussionID', $DiscussionID)
+            ->Where('TreeLeft >=', $TreeRight)
+            ->Set('TreeLeft', 'TreeLeft + 2', FALSE)
+            ->Put();
+
+         // Return the left/right/parent information necessary to add to the comment.
+         // The new item 'left' replaces the parent 'right', and that shifts the parent 'right' up by two.
+         return array(
+            'ParentCommentID' => $CommentID, 
+            'TreeLeft' => $TreeRight, 
+            'TreeRight' => $TreeRight + 1
+         );
+      } else {
+         // There is no parent, so tag the comment on to the end (far right) of the nested set
+         // model (left is max right+1 and right is one more again).
+         return array(
+            'ParentCommentID' => $CommentID, 
+            'TreeLeft' => $MaxRight + 1, 
+            'TreeRight' => $MaxRight + 2);
+      }
    }
 
    // When fetching comments in a discussion, order by the tree first and then
@@ -292,6 +320,9 @@ class ReplyTo extends Gdn_Plugin {
             $Sender->EventArguments['Comment']->ParentCommentID
          );
 
+         // TODO: we could move this update into the InsertPrep() method since we are
+         // already potentially updating it anyway (if the whole tree needs rebuildind).
+
          // Write the tree position details to the new comment.
          // The parent comment ID is already dealt with by the form handler.
          if (!empty($Details)) {
@@ -306,14 +337,63 @@ class ReplyTo extends Gdn_Plugin {
       }
    }
 
-   public function DiscussionController_BeforeDiscussionRender_Handler(&$Sender) {
-      // Add a hidden "reply to comment id" field in the comment submit form.
-      // Name is 'Comment/ParentCommentID'
-      // ID is 'Form_ParentCommentID'
-      // Note: no lomger required, now that we are using AJAX to pull up comment forms
-      // right under the comment they are replying to.
-      //$Sender->Form->AddHidden('ParentCommentID', '');
+   // On deleting a comment, close the left-right gap.
+   // If the comment has any children, then they need moving so that they are
+   // not orphaned.
+   // The default display will still work with gaps not closed and authoned child
+   // comments, but a broken tree becomes less flexible in other things we may
+   // wish to do with it.
 
+   public function CommentModel_DeleteComment_Handler(&$Sender) {
+      if (empty($Sender->EventArguments['CommentID'])) return;
+
+      $CommentID = $Sender->EventArguments['CommentID'];
+
+      $Comment = $this->GetComment($CommentID);
+
+      if (empty($Comment)) return;
+
+      $SQL = Gdn::SQL();
+
+      // Left and right will be continuous if there are no children.
+      if ($Comment->TreeRight != $Comment->TreeLeft + 1) {
+         // Child comments involved - move them first.
+         // Move them to the parent of the comment we are about to delete.
+         $Update = $SQL->Update('Comment')
+            ->Where('ParentCommentID', $CommentID)
+            ->Set('ParentCommentID', $Comment->ParentCommentID)
+            ->Put();
+
+         // Rebuild the tree, since lots of left/rights could need changing.
+         $this->RebuildLeftRight($Comment->DiscussionID);
+
+         // Fetch the comment to be deleted again, just in case (in theory it will not
+         // have changed, as the children will be inserted after it).
+         $Comment = $this->GetComment($CommentID);
+
+         // If left/right not continguous still, then bail out (something has gone wrong).
+         if ($Comment->TreeRight != $Comment->TreeLeft + 1) return;
+      }
+
+      // Move all left and right values above the right value of the comment
+      // to be deleted, down two places to close up the gap.
+      $SQL->Update('Comment')
+         ->Where('DiscussionID', $Comment->DiscussionID)
+         ->Where('TreeLeft >', $Comment->TreeRight)
+         ->Set('TreeLeft', 'TreeLeft - 2', FALSE)
+         ->Put();
+
+      $SQL->Update('Comment')
+         ->Where('DiscussionID', $Comment->DiscussionID)
+         ->Where('TreeRight >', $Comment->TreeRight)
+         ->Set('TreeRight', 'TreeRight - 2', FALSE)
+         ->Put();
+   }
+
+   // Before the comments are rendered, go through them and work out their (relative)
+   // depth and give them classes.
+
+   public function DiscussionController_BeforeDiscussionRender_Handler(&$Sender) {
       // Loop for each comment and build a depth and give them some categories.
       $depthstack = array();
 
@@ -332,12 +412,15 @@ class ReplyTo extends Gdn_Plugin {
 
          $Comment->ReplyToDepth = $depth;
 
-         // TODO: if a tree is cut short or starts half-way through, then links to the rest of the replies
-         // would be useful, e.g. "replies continue..." and "this is a reply to...".
+         // TODO: if a tree is cut short or starts half-way through, then links to the rest 
+         // of the replies would be useful, e.g. "replies continue..." and "this is a reply to...".
+         // Links to individual comments are possible, and would be ideal.
 
          // Set the class of the comment according to depth.
          $CommentClass = 'ReplyToDepth-' . $depth;
 
+         // Add some further classes for blocks of each 5 depth levels, so limits can
+         // be set on the way depth is formatted.
          for($i = 5; $i <= 100; $i += 5) {
             if ($depth >= $i) $CommentClass .= ' ReplyToDepth-' . $i . 'plus';
             else break;
