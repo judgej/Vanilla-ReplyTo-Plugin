@@ -616,7 +616,7 @@ class ReplyTo extends Gdn_Plugin {
             if (trim($CurrentBody) == '' && !empty($DoInsertmention)) {
                 $Sender->Form->SetFormValue(
                     'Body', 
-                    T('Reply to') . ' @' . str_replace(' ', '+', $ParentComment->InsertName) . ': '
+                    sprintf(T('Reply to @%s: '), str_replace(' ', '+', $ParentComment->InsertName))
                 );
             }
 

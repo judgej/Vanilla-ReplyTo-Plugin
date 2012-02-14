@@ -1,6 +1,11 @@
 Notes written for Vanilla 2.0.11 (and most versions before and after 2.0.11)
 ================================
 
+Thanks to:
+
+http://vanillaforums.org/profile/16512/yu_tang for translation pointers
+
+
 +----------------------------------------------------------------------------------------------------+
 + NOTE: this has changed on version 0.1.4, The old technique will work, but this is simpler and will +
 + be better prepared for changes made to Vanilla to allow the class to be modified by a plugin.      +
