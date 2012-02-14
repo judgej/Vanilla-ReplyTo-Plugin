@@ -3,14 +3,14 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.7
+Version: 0.1.8
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
 
 /**
  * @package Vanilla extension
- * @copyright (C) 2010 Jason Judge
+ * @copyright (C) 2010, 2011 Jason Judge
  * @license GPL {@link http://www.gnu.org/licenses/gpl.html}
  * @link http://www.consil.co.uk/
  * @subpackage ReplyTo
@@ -23,13 +23,13 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.7',
+   'Version' => '0.1.8',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
    'HasLocale' => FALSE,
    'RegisterPermissions' => array(),
-   'SettingsUrl' => FALSE, //'/dashboard/settings/replyto',
+   'SettingsUrl' => '/dashboard/plugin/replyto',
    'SettingsPermission' => 'Garden.AdminUser.Only',
    'Author' => 'Jason Judge',
    'AuthorEmail' => 'jason.judge@consil.co.uk',
@@ -608,17 +608,20 @@ class ReplyTo extends Gdn_Plugin {
 
             // Get the username of the user you are replying to, and add their name
             // to the comment body as a "mention".
-            // CHECKME: should we actually add to the current contents of the body, just
-            // in case some other plugin has already populated the body?
             // Translate spaces in a name to plus characters. This is the convention I am
             // using for consistency with the encoding of URLs for profile pages.
-            $Sender->Form->SetFormValue(
-                'Body', 
-                T('Reply to') . ' @' . str_replace(' ', '+', $ParentComment->InsertName) . ': '
-            );
+            // Only put the mention string into the body if the body is empty.
+            $CurrentBody = $Sender->Form->GetFormValue('Body');
+            $DoInsertmention = C('ReplyTo.Mention.Insert', 0);
+            if (trim($CurrentBody) == '' && !empty($DoInsertmention)) {
+                $Sender->Form->SetFormValue(
+                    'Body', 
+                    T('Reply to') . ' @' . str_replace(' ', '+', $ParentComment->InsertName) . ': '
+                );
+            }
 
             // Set up the form for rendering or processing.
-            $Sender->View = 'Comment'; //comment/body
+            $Sender->View = 'Comment';
 
             // Run Comment() in the PostController to add a comment to this discussion.
             // We also need to ensure the parent comment ID gets into the process.
@@ -675,5 +678,32 @@ class ReplyTo extends Gdn_Plugin {
          !empty($Sender->EventArguments['Comment']->ReplyToClass)
          ? ' ' . $Sender->EventArguments['Comment']->ReplyToClass : ''
       );
+   }
+
+   // Options for this module.
+   
+   public function Base_GetAppSettingsMenuItems_Handler(&$Sender) {
+      $Menu = $Sender->EventArguments['SideMenu'];
+      $Menu->AddLink('Add-ons', 'Reply To', 'plugin/replyto', 'Garden.Themes.Manage');
+   }   
+
+   public function PluginController_ReplyTo_Create(&$Sender) {
+      $Sender->AddSideMenu('plugin/replyto');
+      $Sender->Form = new Gdn_Form();
+      $Validation = new Gdn_Validation();
+      $ConfigurationModel = new Gdn_ConfigurationModel($Validation);
+      $ConfigurationModel->SetField(array('ReplyTo.Mention.Insert'));
+      $Sender->Form->SetModel($ConfigurationModel);
+            
+      if ($Sender->Form->AuthenticatedPostBack() === FALSE) {    
+         $Sender->Form->SetData($ConfigurationModel->Data);
+      } else {
+         $Data = $Sender->Form->FormValues();
+         if ($Sender->Form->Save() !== FALSE) {
+            $Sender->StatusMessage = Gdn::Translate("Your settings have been saved.");
+         }
+      }
+
+      $Sender->Render($this->GetView('replyto-settings.php'));
    }
 }
