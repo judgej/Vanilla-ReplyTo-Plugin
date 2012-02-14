@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.3
+Version: 0.1.4
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -23,7 +23,7 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.3',
+   'Version' => '0.1.4',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
@@ -414,12 +414,28 @@ class ReplyTo extends Gdn_Plugin {
    // depth and give them classes.
 
    public function DiscussionController_BeforeDiscussionRender_Handler(&$Sender) {
+      // Get a list of all comments in this set, i.e. displayed on this page.
+      $CommentIDs = array();
+
+      foreach($Sender->Data['Comments'] as $Comment) {
+         $CommentIDs[$Comment->CommentID] = $Comment->CommentID;
+      }
+
       // Loop for each comment and build a depth and give them some categories.
       $depthstack = array();
 
       foreach($Sender->Data['Comments'] as $Comment) {
-         // If we hit a comment without a parent, then immediately treat it as level 0.
+         // If we hit a comment without a parent, then treat it as level 0.
          if (empty($Comment->ParentCommentID)) $depthstack = array();
+
+         // If this comment has a parent that is no on this page, then provide a link
+         // back to the parent.
+         if (!empty($Comment->ParentCommentID) && empty($CommentIDs[$Comment->ParentCommentID])) {
+            $Comment->ReplyToParentURL = Gdn::Request()->Url(
+               'discussion/comment/' . $Comment->ParentCommentID . '/#Comment_' . $Comment->ParentCommentID,
+               TRUE
+            );
+         }
 
          // Calculate the depth of the comment (within the context of the selected comments, i.e. not
          // in absolute terms.
@@ -437,18 +453,26 @@ class ReplyTo extends Gdn_Plugin {
          // Links to individual comments are possible, and would be ideal.
 
          // Set the class of the comment according to depth.
-         $CommentClass = 'ReplyToDepth-' . $depth;
-
-         // Add some further classes for blocks of each 5 depth levels, so limits can
-         // be set on the way depth is formatted.
-         for($i = 5; $i <= 100; $i += 5) {
-            if ($depth >= $i) $CommentClass .= ' ReplyToDepth-' . $i . 'plus';
-            else break;
-         }
-
-         // This is the set of classes that is applied to the comment in the output view.
-         $Comment->ReplyToClass = trim($CommentClass);
+         $Comment->ReplyToClass = $this->DepthClasses($depth);
       }
+   }
+
+   // Return comment classes for a specified depth.
+
+   public function DepthClasses($depth) {
+      $Prefix = 'ReplyToDepth';
+
+      $Class = $Prefix . '-' . $depth;
+
+      // Add some further classes for blocks of each 5 depth levels, so limits can
+      // be set on the way depth is formatted.
+      for($i = 1; $i <= 100; $i += 5) {
+         if ($depth >= $i) $Class .= ' ' . $Prefix . '-' . $i . 'plus';
+         else break;
+      }
+
+      // This is the set of classes that is applied to the comment in the output view.
+      return trim($Class);
    }
 
    // Pop-up form allowing a comment to be created underneath any existing comment.
@@ -507,5 +531,23 @@ class ReplyTo extends Gdn_Plugin {
              $Sender->Options .= '<span>'.Anchor(T('Reply'), '/vanilla/post/replycomment/'.$CommentID, 'ReplyComment').'</span>';
           }
       }
+
+      // Add a "in reply to" link if the parent is not on the current page.
+      if (!empty($Sender->CurrentComment->ReplyToParentURL)) {
+          $Sender->Options .= '<span>'.Anchor(T('In Reply To'), $Sender->CurrentComment->ReplyToParentURL).'</span>';
+      }
+   }
+
+   // Insert the indentation classes into the comment.
+   // An addition is made to the WriteComment() function to expose the comment CssClass as
+   // $Sender->CssClassComment.
+
+   public function DiscussionController_BeforeCommentDisplay_handler(&$Sender) {
+      if (!isset($Sender->CssClassComment)) return;
+
+      $Sender->CssClassComment .= (
+         !empty($Sender->EventArguments['Comment']->ReplyToClass)
+         ? ' ' . $Sender->EventArguments['Comment']->ReplyToClass : ''
+      );
    }
 }

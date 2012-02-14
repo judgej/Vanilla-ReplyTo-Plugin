@@ -1,35 +1,39 @@
 
-/* Indent comments according to their depth. */
+/* 
+   Indent comments according to their depth. 
+   The CommentForm has a matching negative indent so that it does not
+   get squeezed up with the increasingly indented comments.
+*/
 
-.ReplyToDepth-1 {
+.ReplyToDepth-1 .Comment {
     padding-left: 2em;
 }
 .ReplyToDepth-1 .CommentForm {
     margin-left: -2em;
 }
 
-.ReplyToDepth-2 {
+.ReplyToDepth-2 .Comment {
     padding-left: 4em;
 }
 .ReplyToDepth-2 .CommentForm {
     margin-left: -4em;
 }
 
-.ReplyToDepth-3 {
+.ReplyToDepth-3 .Comment {
     padding-left: 6em;
 }
 .ReplyToDepth-3 .CommentForm {
     margin-left: -6em;
 }
 
-.ReplyToDepth-4 {
+.ReplyToDepth-4 .Comment {
     padding-left: 8em;
 }
 .ReplyToDepth-4 .CommentForm {
     margin-left: -8em;
 }
 
-.ReplyToDepth-5 {
+.ReplyToDepth-5 .Comment {
     padding-left: 10em;
 }
 .ReplyToDepth-5 .CommentForm {
@@ -37,39 +41,39 @@
 }
 
 /* Reduce the indenting to single ems after 5 levels */
-.ReplyToDepth-6 {
+.ReplyToDepth-6 .Comment {
     padding-left: 11em;
 }
 .ReplyToDepth-6 .CommentForm {
     margin-left: -11em;
 }
 
-.ReplyToDepth-7 {
+.ReplyToDepth-7 .Comment {
     padding-left: 12em;
 }
 .ReplyToDepth-7 .CommentForm {
     margin-left: -12em;
 }
 
-.ReplyToDepth-8 {
+.ReplyToDepth-8 .Comment {
     padding-left: 13em;
 }
 .ReplyToDepth-8 .CommentForm {
     margin-left: -13em;
 }
 
-.ReplyToDepth-9 {
+.ReplyToDepth-9 .Comment {
     padding-left: 14em;
 }
 .ReplyToDepth-9 .CommentForm {
     margin-left: -14em;
 }
 
-/* Stop indenting after 10 levels */
-.ReplyToDepth-10plus {
+/* Stop indenting any further after 10 levels */
+.ReplyToDepth-10plus .Comment {
     padding-left: 15em;
 }
-.ReplyToDepth-10 .CommentForm {
+.ReplyToDepth-10plus .CommentForm {
     margin-left: -15em;
 }
 

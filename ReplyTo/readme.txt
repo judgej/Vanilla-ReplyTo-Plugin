@@ -2,22 +2,27 @@ Notes written for Vanilla 2.0.11 (and most versions before and after 2.0.11)
 ================================
 
 +----------------------------------------------------------------------------------------------------+
++ NOTE: this has changed on version 0.1.4, The old technique will work, but this is simpler and will +
++ be better prepared for changes made to Vanilla to allow the class to be modified by a plugin.      +
++                                                                                                    + 
 + Most of this plugin is self-contained. There is just one thing that                                +
 + needs to be added to the theme: the indentation classes of the comments                            +
 + in the comments lists.                                                                             +
 +                                                                                                    + 
 + This is done in applications/vanilla/views/discussion/helper_functions.php                         +
-+ Look around like 29, that should look like this:                                                   +
++ Look around like 26 for the 'BeforeCommentDisplay' event call, that should look like this:         +
 +                                                                                                    + 
-+ <div class="Comment">                                                                              +
++ $Sender->FireEvent('BeforeCommentDisplay');                                                        +
 +                                                                                                    + 
-+ Add the class display to this line like this:                                                      +
++ Add the following line just before it, allowing the event handler to change the CSS class of       +
++ the coment:                                                                                        +
 +                                                                                                    + 
-+ <div class="Comment<?php if (!empty($Object->ReplyToClass)) echo ' '.$Object->ReplyToClass; ?>">   +
++ Sender->CssClassComment =& $CssClass;                                                              +
 +                                                                                                    +
-+ Note that you may already have helper_functions.php over-ridden in your theme.                     +
++ Note that you may already have helper_functions.php over-ridden in your theme. If not              +
 + I would recommend moving it to your theme anyway to allow product upgrades without                 +
-+ losing this customisation.                                                                         +
++ losing this customisation. The theme path to copy the templat to is:                               +
++ themes/{theme-name}/vanilla/views/discussion/helper_functions.php                                  +
 +                                                                                                    +
 +----------------------------------------------------------------------------------------------------+
 
@@ -66,6 +71,10 @@ classes when the updated comment is reloaded. Another approach to the problem
 could be to add a "depth" field to the edit comment form (using AJAX) and 
 then capture that on the server and serve back the depth css classes as
 appropriate.
+Update: after experimenting a little more, I realise that the list item
+that a comment is in, *is* replaced when that comment is submitted. At least,
+when the CSS classes are applied to the list item, they are lost on display
+of the edited comment.
 
 Occasionally when a comment is made to the end-of-discussion comment box, the
 coment appears at the start of the thread instead of the end. For some reason
@@ -88,6 +97,14 @@ into the module, perhaps just by creating ad-hoc SQL and injecting it into
 the query to be run.
 [FIXED 0.1.3]
 
+It is unlikely comments will be indented correctly if pages of comments
+are delivered by AJAX. Each new page fetched will be treated indepentantly
+and will not continue any depth indenting that had been fetched prior to it.
+Personally I avoid AJAX page exending anyway, since it removes the ability
+for a user to bookmark the page or come back to the same page to view
+the comments (the AJAX fetches would be lost on returning). I prefer stateless
+pages in general ease of navigation.
+
 The hope, of course, is that vanilla will one day support structured comments
 right out the box. It's not hard, and it is very, very useful. Take a look at
 a site like reddit.com, and imagine that without comment structure. It simply
@@ -103,12 +120,12 @@ and TreeRight. The parent comment ID is the simple one, and points to either
 a parent comment (the comment it is replying to) or zero.
 
 The sort order of the comments in a discussion follow the tree structure from
-left to right. Any comments without a parent are put at the level (a zero depth)
-and displayed after any comments in the tree.
+left to right. Any comments without a parent are put at the top level (a zero 
+depth) and displayed amoungst the comment trees, in posted date order.
 
 The TreeLeft and TreeRight columns model the tree using the Nested Set Model,
 aka the Celko tree. This model provides an incrementing counter up the left
-sides of each tree node and right the right sides, counting left to right.
+sides of each tree branch and down the right sides, counting left to right.
 Although this takes some effort to rebuid when nodes are added and deleted, it
 does make selection of sets of the tree and ordering extremely efficient. The 
 assumption is that discussuins will not get so big that rebuilding becomes a
@@ -146,3 +163,12 @@ functionality.
 
 Other potential improvements could be the ability to limit the maximum depth
 of comments in any discussion.
+
+An addition I would like to see are links where a tree is split acorss several
+pages. Links at the break points could take the user to the next and previous
+comments in the tree that are displayed on other pages.
+
+At the moment this plugin passes lists of CSS classes to the comment display
+to be used to format any indenting. It would be useful also to pass in pure
+data (indent level etc) so that the theme can use that data as it sees fit
+to modify the markup.
