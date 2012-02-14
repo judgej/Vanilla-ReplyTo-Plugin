@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.6
+Version: 0.1.7
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -23,7 +23,7 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.6',
+   'Version' => '0.1.7',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
@@ -67,7 +67,7 @@ class ReplyTo extends Gdn_Plugin {
       if (!$this->IsEnabled()) return;
       
       $Controller->AddCssFile($this->GetResource('design/replyto.css', FALSE, FALSE));
-      $Controller->AddJsFile($this->GetResource('js/discussion.js', FALSE, FALSE));
+      $Controller->AddJsFile($this->GetResource('js/replyto.js', FALSE, FALSE));
    }
 
    // Add the resources used by the front end on the discussion and post (AJAX) controller pages.
@@ -203,7 +203,7 @@ class ReplyTo extends Gdn_Plugin {
    // to be used with "SET" statement. "A" is $Field and $Options define the
    // remainder in the same format as the $GDN::SQL()->SelectCase() method.
    // Returns a string.
-   // Note no escaping is done here, so only use with numeric values for now.
+   // Note no escaping or quoting is done here, so only use with numeric values for now.
 
    public function SetCase($SetField, $Field, $Options) {
       $CaseOptions = 'case ' . $Field;
@@ -360,9 +360,12 @@ class ReplyTo extends Gdn_Plugin {
    // On deleting a comment, close the left-right gap.
    // If the comment has any children, then they need moving so that they are
    // not orphaned.
-   // The default display will still work with gaps not closed and authoned child
+   // The default display will still work with gaps not closed and orthaned child
    // comments, but a broken tree becomes less flexible in other things we may
-   // wish to do with it.
+   // wish to do with it. For example, the different between a TreeLeft and TreeRight
+   // value for a comment, when divided by two, tells you how any descendants a
+   // comment has. However, if those values cannot be trusted to be correct and
+   // contigous across the tree, then you need to go count the actual comments.
 
    public function CommentModel_DeleteComment_Handler(&$Sender) {
       if (empty($Sender->EventArguments['CommentID'])) return;
@@ -417,6 +420,7 @@ class ReplyTo extends Gdn_Plugin {
       // Get a list of all comment IDs in this set, i.e. displayed on this page.
       $CommentIDs = array();
       $MaxTreeRight = 1;
+      $DepthCounts = array();
 
       foreach($Sender->Data['Comments'] as $Comment) {
          $CommentIDs[$Comment->CommentID] = $Comment->CommentID;
@@ -593,13 +597,28 @@ class ReplyTo extends Gdn_Plugin {
 
             // Check whether the user is permitted to comment on this discussion.
             $Discussion = $Sender->DiscussionModel->GetID($DiscussionID);
-            $Sender->Permission('Vanilla.Comments.Add', TRUE, 'Category', $Discussion->CategoryID);
+            if (isset($Discussion->PermissionCategoryID)) {
+                $Sender->Permission('Vanilla.Comments.Add', TRUE, 'Category', $Discussion->PermissionCategoryID);
+            } else {
+                $Sender->Permission('Vanilla.Comments.Add', TRUE, 'Category', $Discussion->CategoryID);
+            }
 
             // Make sure the form has the parent comment ID.
             $Sender->Form->AddHidden('ParentCommentID', $CommentID);
 
+            // Get the username of the user you are replying to, and add their name
+            // to the comment body as a "mention".
+            // CHECKME: should we actually add to the current contents of the body, just
+            // in case some other plugin has already populated the body?
+            // Translate spaces in a name to plus characters. This is the convention I am
+            // using for consistency with the encoding of URLs for profile pages.
+            $Sender->Form->SetFormValue(
+                'Body', 
+                T('Reply to') . ' @' . str_replace(' ', '+', $ParentComment->InsertName) . ': '
+            );
+
             // Set up the form for rendering or processing.
-            $Sender->View = 'Comment';
+            $Sender->View = 'Comment'; //comment/body
 
             // Run Comment() in the PostController to add a comment to this discussion.
             // We also need to ensure the parent comment ID gets into the process.
@@ -617,7 +636,12 @@ class ReplyTo extends Gdn_Plugin {
    protected function AddReplyToButton(&$Sender) {
       if (!Gdn::Session()->UserID) return;
 
-      $CategoryID = $Sender->CategoryID;
+      if (isset($Sender->Discussion->PermissionCategoryID)) {
+         $CategoryID = $Sender->Discussion->CategoryPermissionID;
+      } else {
+         $CategoryID = $Sender->Discussion->CategoryID;
+      }
+
       $Session = Gdn::Session();
       $CommentID = $Sender->CurrentComment->CommentID;
 

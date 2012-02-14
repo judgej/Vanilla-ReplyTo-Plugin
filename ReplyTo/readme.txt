@@ -17,10 +17,10 @@ Notes written for Vanilla 2.0.11 (and most versions before and after 2.0.11)
 + Add the following line just before it, allowing the event handler to change the CSS class of       +
 + the coment:                                                                                        +
 +                                                                                                    + 
-+ Sender->CssClassComment =& $CssClass;                                                              +
++ $Sender->CssClassComment =& $CssClass;                                                             +
 +                                                                                                    +
 + Note that you may already have helper_functions.php over-ridden in your theme. If not              +
-+ I would recommend moving it to your theme anyway to allow product upgrades without                 +
++ I would recommend copying it to your theme anyway to allow product upgrades without                +
 + losing this customisation. The theme path to copy the templat to is:                               +
 + themes/{theme-name}/vanilla/views/discussion/helper_functions.php                                  +
 +                                                                                                    +
@@ -178,3 +178,6 @@ Update: data available in the comments are ParentCommentID, the TreeLeft and
 TreeRight (you can use this to tell if there are any child comments, and how
 many there are), and ReplyToDepth (which is the depth calculated for the current
 page).
+
+Being able to turn this plugin on and off for specific categories would be good,
+as well as a master switch to enable and disable that feature too.
