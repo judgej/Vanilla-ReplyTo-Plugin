@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.5
+Version: 0.1.6
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -23,7 +23,7 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.5',
+   'Version' => '0.1.6',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
@@ -423,6 +423,15 @@ class ReplyTo extends Gdn_Plugin {
          if ($Comment->TreeRight > $MaxTreeRight) $MaxTreeRight = $Comment->TreeRight + 1;
       }
 
+      // Find all comments that have parents on a previous page.
+      $NoParents = array();
+      foreach($Sender->Data['Comments'] as $Comment) {
+         if (!empty($Comment->ParentCommentID) && empty($CommentIDs[$Comment->ParentCommentID])) {
+            $NoParents[] = $Comment->CommentID;
+         }
+      }
+      if (!empty($NoParents)) $DepthCounts = $this->CountAncestors($NoParents);
+
       // Loop for each comment and build a depth and give them some categories.
       $depthstack = array();
 
@@ -439,8 +448,12 @@ class ReplyTo extends Gdn_Plugin {
             );
 
             // Set the depth as one more than its number of ancestors.
-            $Ancestors = $this->AncestorComments($Comment->CommentID);
-            $depthstack = array_pad(array(), count($Ancestors), $MaxTreeRight);
+            if (isset($DepthCounts[$Comment->CommentID])) {
+               // Fill out the depth array just to fool the algorithm.
+               // We probably could do it more efficiently with an offset, but then have two
+               // variables to account for the depth.
+               $depthstack = array_pad(array(), $DepthCounts[$Comment->CommentID], $MaxTreeRight);
+            }
          }
 
          // Calculate the depth of the comment (within the context of the selected comments, i.e. not
@@ -479,6 +492,41 @@ class ReplyTo extends Gdn_Plugin {
 
       // This is the set of classes that is applied to the comment in the output view.
       return trim($Class);
+   }
+
+   // Count ancestors for a range of comments.
+   // Will accept a single comment ID or an array of comment IDs.
+   // Returns an array of comment IDs and counts for each.
+   // No zero counts will be returned, so an empty array will be returned
+   // if none of the supplied comment IDs have ancestor comments.
+
+   public function CountAncestors($CommentIDs = array()) {
+      // Make sure the input is an array.
+      // TODO: validate them as numeric.
+      if (!is_array($CommentIDs)) $CommentIDs = array($CommentIDs);
+
+      $SQL = Gdn::SQL();
+
+      $Data = $SQL->Select('Roots.CommentID')
+         ->Select('Ancs.CommentID', 'count', 'AncestorCount')
+         ->From('Comment Roots')
+         ->Join('Comment Ancs', 'Ancs.DiscussionID = Roots.DiscussionID'
+            . ' AND Ancs.TreeLeft < Roots.TreeLeft'
+            . ' AND Ancs.TreeRight > Roots.TreeRight', 'inner');
+
+      if (!empty($CommentIDs)) {
+         $Data = $Data->WhereIn('Roots.CommentID', $CommentIDs);
+      }
+
+      $Data = $Data->GroupBy('Roots.CommentID')
+         ->OrderBy('Roots.CommentID', 'asc')
+         ->Get();
+
+      $Counts = array();
+
+      while ($Count = $Data->NextRow()) $Counts[$Count->CommentID] = $Count->AncestorCount;
+
+      return $Counts;
    }
 
    // Return a list of ancestor comments IDs for a given comment.
