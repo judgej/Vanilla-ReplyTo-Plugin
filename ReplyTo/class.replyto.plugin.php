@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.2
+Version: 0.1.3
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -23,7 +23,7 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.2',
+   'Version' => '0.1.3',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
@@ -153,8 +153,6 @@ class ReplyTo extends Gdn_Plugin {
    }
 
    public function RebuildLeftRight($DiscussionID) {
-      // Get the base comment. Actually it is the discussion in vanilla 2.
-
       // Get all the comments for the discussion.
       // Order by parent and then creation date.
       $SQL = Gdn::SQL();
@@ -192,10 +190,42 @@ class ReplyTo extends Gdn_Plugin {
       $RightData[''] = 'TreeRight';
 
       $Update = $SQL->Update('Comment')
-         ->SetCase('TreeLeft', 'CommentID', $LeftData)
-         ->SetCase('TreeRight', 'CommentID', $RightData)
+         //->SetCase('TreeLeft', 'CommentID', $LeftData)
+         //->SetCase('TreeRight', 'CommentID', $RightData)
+         ->Set('TreeLeft', $this->SetCase('TreeLeft', 'CommentID', $LeftData), FALSE)
+         ->Set('TreeRight', $this->SetCase('TreeRight', 'CommentID', $RightData), FALSE)
          ->Where('DiscussionID', $DiscussionID)
          ->Put();
+
+   }
+
+   // Create a "case A when B then C [when D then E ...] [else F];" sql fragment
+   // to be used with "SET" statement. "A" is $Field and $Options define the
+   // remainder in the same format as the $GDN::SQL()->SelectCase() method.
+   // Returns a string.
+   // Note no escaping is done here, so only use with numeric values for now.
+
+   public function SetCase($SetField, $Field, $Options) {
+      $CaseOptions = 'case ' . $Field;
+
+      if (empty($Options)) {
+         // For some reason there are no options, so just return the field we are updating.
+         return $SetField;
+      } else {
+         foreach ($Options as $Key => $Val) {
+            if ($Key == '') {
+               $Default = $Val;
+            } else {
+               $CaseOptions .= ' when ' . $Key . ' then ' . $Val;
+            }
+         }
+      }
+
+      if (isset($Default)) $CaseOptions .= ' else ' . $Default;
+
+      $CaseOptions .= ' end';
+
+      return $CaseOptions;
    }
 
    // Get the tree-related attributes of a comment.
@@ -211,15 +241,21 @@ class ReplyTo extends Gdn_Plugin {
    }
 
    // Replies will always be added to the same part of the tree, i.e. as a last sibling
-   // of an existing comment.
+   // of an existing comment. For example, if replying to comment X, which already has
+   // three replies to it, this reply will become the forth child comment of comment X.
+   // The ordering replies on the date posted, so if anything starts messing around with
+   // those dates, then the ordering of siblings could change.
    // This function opens a gap in the left/right values in the comment tree, then returns
    // the new left, right, and parent ID values as an array.
    // If the left/right values are not contiguous before it starts, then it will rebuild
    // the left/right values for the complete discussion.
    // Note also that the base left/right is in the discussion, so a reply direct to the discussion
    // will open the gap there.
+   // The CommentID passed in is the comment we wish to reply to.
+   // If $InsertCommentID is set, then that is updated as the comment that is being inserted
+   // into the tree..
 
-   public function InsertPrep($DiscussionID, $CommentID) {
+   public function InsertPrep($DiscussionID, $CommentID, $InsertCommentID = 0) {
       // Get the count of comments in the discussion.
       $CommentCount = $this->CommentCount($DiscussionID);
 
@@ -241,6 +277,8 @@ class ReplyTo extends Gdn_Plugin {
          return;
       }
 
+      $SQL = Gdn::SQL();
+
       // Now the main task: opening up a gap in the tree numbering for the new comment.
       // We want to insert as the last child of comment $CommentID.
       // A gap opnly needs to be opened up if this is a reply to an existing comment.
@@ -260,8 +298,6 @@ class ReplyTo extends Gdn_Plugin {
 
          $TreeRight = (int)$InsertComment->TreeRight;
 
-         $SQL = Gdn::SQL();
-
          $Update = $SQL->Update('Comment')
             ->Where('DiscussionID', $DiscussionID)
             ->Where('TreeRight >=', $TreeRight)
@@ -276,27 +312,25 @@ class ReplyTo extends Gdn_Plugin {
 
          // Return the left/right/parent information necessary to add to the comment.
          // The new item 'left' replaces the parent 'right', and that shifts the parent 'right' up by two.
-         return array(
-            'ParentCommentID' => $CommentID, 
-            'TreeLeft' => $TreeRight, 
-            'TreeRight' => $TreeRight + 1
-         );
+         $TreeLeft = $TreeRight;
       } else {
          // There is no parent, so tag the comment on to the end (far right) of the nested set
          // model (left is max right+1 and right is one more again).
-         return array(
-            'ParentCommentID' => $CommentID, 
-            'TreeLeft' => $MaxRight + 1, 
-            'TreeRight' => $MaxRight + 2);
+         $TreeLeft = $MaxRight + 1;
       }
-   }
 
-   // When fetching comments in a discussion, order by the tree first and then
-   // the posted date. Note this has now been moved to the comment model constructor.
+      if ($InsertCommentID > 0) {
+         $Update = $SQL->Update('Comment')
+            ->Where('CommentID', $InsertCommentID)
+            ->Set('TreeLeft', $TreeLeft)
+            ->Set('TreeRight', $TreeLeft + 1)
+            ->Put();
+      }
 
-   public function CommentModel_BeforeGet_Handler(&$Sender) {
-      //$Sender->SQL->OrderBy('TreeLeft', 'asc');
-      //$Sender->SQL->OrderBy('DateInserted', 'asc'); // CHECKME: is this needed?
+      return array(
+         'ParentCommentID' => $CommentID, 
+         'TreeLeft' => $TreeLeft, 
+         'TreeRight' => $TreeLeft + 1);
    }
 
    // Set the tree order of all comments in the model as soon as it is instantiated.
@@ -317,23 +351,9 @@ class ReplyTo extends Gdn_Plugin {
          // Open up a space in the tree for this comment..
          $Details = $this->InsertPrep(
             $Sender->EventArguments['Comment']->DiscussionID,
-            $Sender->EventArguments['Comment']->ParentCommentID
+            $Sender->EventArguments['Comment']->ParentCommentID,
+            $Sender->EventArguments['Comment']->CommentID
          );
-
-         // TODO: we could move this update into the InsertPrep() method since we are
-         // already potentially updating it anyway (if the whole tree needs rebuildind).
-
-         // Write the tree position details to the new comment.
-         // The parent comment ID is already dealt with by the form handler.
-         if (!empty($Details)) {
-            $SQL = Gdn::SQL();
-
-            $Update = $SQL->Update('Comment')
-               ->Where('CommentID', $Sender->EventArguments['Comment']->CommentID)
-               ->Set('TreeLeft', $Details['TreeLeft'])
-               ->Set('TreeRight', $Details['TreeRight'])
-               ->Put();
-         }
       }
    }
 
@@ -426,11 +446,9 @@ class ReplyTo extends Gdn_Plugin {
             else break;
          }
 
+         // This is the set of classes that is applied to the comment in the output view.
          $Comment->ReplyToClass = trim($CommentClass);
       }
-   }
-
-   public function CommentModel_BeforeSaveComment_Handler(&$Sender) {
    }
 
    // Pop-up form allowing a comment to be created underneath any existing comment.
@@ -464,19 +482,6 @@ class ReplyTo extends Gdn_Plugin {
             $Sender->Comment($DiscussionID);
          }
       }
-
-      // CHECKME: does the draft model potenially play a part in this?
-/*
-      if (is_numeric($CommentID) && $CommentID > 0) {
-         $this->Form->SetModel($this->CommentModel);
-         $this->Comment = $this->CommentModel->GetID($CommentID);
-      } else {
-         $this->Form->SetModel($this->DraftModel);
-         $this->Comment = $this->DraftModel->GetID($DraftID);
-      }
-      $this->View = 'Comment';
-      $this->Comment($this->Comment->DiscussionID);
-*/
    }
 
    // Add the option to "reply to" the comment.
@@ -498,14 +503,9 @@ class ReplyTo extends Gdn_Plugin {
              && $Session->CheckPermission('Vanilla.Comments.Add', TRUE, 'Category', $CategoryID)
           ) {
              // Add the "Reply To" link on the options for the comment.
+             // It sucks that we must generate HTML here and not just data for the view.
              $Sender->Options .= '<span>'.Anchor(T('Reply'), '/vanilla/post/replycomment/'.$CommentID, 'ReplyComment').'</span>';
           }
       }
    }
-
-   // TODO: pre comments rendering, calculate the depths of the comments and set
-   // approprate classes and other information for each one.
-
-   // TODO: add JS and styles to the comment pages where needed.
-
 }

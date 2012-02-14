@@ -47,7 +47,9 @@ plugin may break in future vanilla versions.
 After posting a reply, a redirect is performed to take the user to the new
 comment. This may be an issue with embedded versions of vanilla. Once the
 methods of handling AJAX forms are more fully understood, we can try coding
-to avoid the redirect.
+to avoid the redirect. If we are to use AJAX only, then the front end would
+need to tell the new comment what its depth is as it is submitted, (and the
+back end can supply the relevant classes).
 
 The "Reply" button can be clicked multiple times, bringing up a new comment
 form each time. The button needs to be disabled, or at least to not attempt
@@ -60,7 +62,10 @@ When editing a comment that is nested to any depth, upon saving the comment,
 the indent style disappears completely. Since the comment is updated in
 isolation, we do not know what its depth of indent should be, so we will
 need to save it somehow (probably at the browser) and restore the indent
-classes when the updated comment is reloaed.
+classes when the updated comment is reloaded. Another approach to the problem
+could be to add a "depth" field to the edit comment form (using AJAX) and 
+then capture that on the server and serve back the depth css classes as
+appropriate.
 
 Occasionally when a comment is made to the end-of-discussion comment box, the
 coment appears at the start of the thread instead of the end. For some reason
@@ -76,6 +81,12 @@ to be configured for this plugin.
 
 No tidy-up of the tree structure is done when comments are deleted.
 [FIXED 0.1.2]
+
+It has been pointed out that this module uses a custom extension to the SQL
+driver to support the SetCase() method. This needs to be somehow brought
+into the module, perhaps just by creating ad-hoc SQL and injecting it into
+the query to be run.
+[FIXED 0.1.3]
 
 The hope, of course, is that vanilla will one day support structured comments
 right out the box. It's not hard, and it is very, very useful. Take a look at
@@ -114,3 +125,24 @@ which clearly shows the nesting: http://www.reddit.com/r/php
 
 The parent comment ID is not used in the tree structure formatting. It is only
 required when the left/right nest set values need to be rebuilt.
+
+Request for Changes
+===================
+
+A request has been made for adminisration functions to move comments around
+on the hierachy. I probably won't implement this myself, but welcome any
+code to include if anyone else would like to tacklle it.
+
+The back-end functionality would be straight-forward: set the new ParentCommentID
+on a comment (with zero to put a comment at the top level, straigh off the
+discussion), then call up ReplyTo->RebuildLeftRight($DiscussionID) to rebuild the
+nested link tree model on that discussion. That should be all that is needed,
+with your imagination on what can be provided at the front end.
+
+The front end and back end ought to prevent a comment being added to another that
+was created later than it. Out-of-order comments may look a bit strange if
+they are allowed, though technically shouldnot cause any issues with the tree
+functionality.
+
+Other potential improvements could be the ability to limit the maximum depth
+of comments in any discussion.
