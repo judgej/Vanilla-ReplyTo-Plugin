@@ -104,6 +104,7 @@ Personally I avoid AJAX page exending anyway, since it removes the ability
 for a user to bookmark the page or come back to the same page to view
 the comments (the AJAX fetches would be lost on returning). I prefer stateless
 pages in general ease of navigation.
+[Possibly fixed 0.1.5 - nested levels now carry across pages]
 
 The hope, of course, is that vanilla will one day support structured comments
 right out the box. It's not hard, and it is very, very useful. Take a look at
@@ -167,8 +168,13 @@ of comments in any discussion.
 An addition I would like to see are links where a tree is split acorss several
 pages. Links at the break points could take the user to the next and previous
 comments in the tree that are displayed on other pages.
+[Done 0.1.4]
 
 At the moment this plugin passes lists of CSS classes to the comment display
 to be used to format any indenting. It would be useful also to pass in pure
 data (indent level etc) so that the theme can use that data as it sees fit
 to modify the markup.
+Update: data available in the comments are ParentCommentID, the TreeLeft and
+TreeRight (you can use this to tell if there are any child comments, and how
+many there are), and ReplyToDepth (which is the depth calculated for the current
+page).

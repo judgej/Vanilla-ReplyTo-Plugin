@@ -3,7 +3,7 @@
 Extension Name: ReplyTo
 Extension Url: http://lussumo.com/addons/index.php
 Description: Allows users to reply to specific comments.
-Version: 0.1.4
+Version: 0.1.5
 Author: Jason Judge
 Author Url: http://www.consil.co.uk/
 */
@@ -23,7 +23,7 @@ Author Url: http://www.consil.co.uk/
 $PluginInfo['ReplyTo'] = array(
    'Name' => 'ReplyTo',
    'Description' => 'Allows a reply to be made to a specific comment, supporting nested comments.',
-   'Version' => '0.1.4',
+   'Version' => '0.1.5',
    'RequiredApplications' => array('Vanilla' => '2.0.9'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
@@ -414,11 +414,13 @@ class ReplyTo extends Gdn_Plugin {
    // depth and give them classes.
 
    public function DiscussionController_BeforeDiscussionRender_Handler(&$Sender) {
-      // Get a list of all comments in this set, i.e. displayed on this page.
+      // Get a list of all comment IDs in this set, i.e. displayed on this page.
       $CommentIDs = array();
+      $MaxTreeRight = 1;
 
       foreach($Sender->Data['Comments'] as $Comment) {
          $CommentIDs[$Comment->CommentID] = $Comment->CommentID;
+         if ($Comment->TreeRight > $MaxTreeRight) $MaxTreeRight = $Comment->TreeRight + 1;
       }
 
       // Loop for each comment and build a depth and give them some categories.
@@ -428,13 +430,17 @@ class ReplyTo extends Gdn_Plugin {
          // If we hit a comment without a parent, then treat it as level 0.
          if (empty($Comment->ParentCommentID)) $depthstack = array();
 
-         // If this comment has a parent that is no on this page, then provide a link
+         // If this comment has a parent that is not on this page, then provide a link
          // back to the parent.
          if (!empty($Comment->ParentCommentID) && empty($CommentIDs[$Comment->ParentCommentID])) {
             $Comment->ReplyToParentURL = Gdn::Request()->Url(
                'discussion/comment/' . $Comment->ParentCommentID . '/#Comment_' . $Comment->ParentCommentID,
                TRUE
             );
+
+            // Set the depth as one more than its number of ancestors.
+            $Ancestors = $this->AncestorComments($Comment->CommentID);
+            $depthstack = array_pad(array(), count($Ancestors), $MaxTreeRight);
          }
 
          // Calculate the depth of the comment (within the context of the selected comments, i.e. not
@@ -473,6 +479,52 @@ class ReplyTo extends Gdn_Plugin {
 
       // This is the set of classes that is applied to the comment in the output view.
       return trim($Class);
+   }
+
+   // Return a list of ancestor comments IDs for a given comment.
+   // The count of ancestors will give the absolue depth of the comment.
+   // An empty list will be returned if the comment is hanging directly off the discussion.
+   // Note: don't assume the ancestors link to each other contigously. They should do,
+   // but if the Nested Tree gets messed up at all - e.g. comments are removed by other
+   // plugins without firing events to rebuild the tree - then there may be gaps in the links.
+   // The first comment in the list will be the top level, and the last will be the
+   // ancestor of the specified comment.
+
+   public function AncestorComments($CommentID) {
+      $Comments = array();
+
+      // Get details of the comment we are starting at.
+      $Comment = $this->GetComment($CommentID);
+
+      // Comment was not found.
+      if (empty($Comment)) return $Comments;
+
+      // Comment has no ancestors or the discussion has never been written to with this
+      // plugin enabled.
+      if (empty($Comment->ParentCommentID)
+          || empty($Comment->TreeLeft) || empty($Comment->TreeRight)
+      ) return $Comments;
+
+      $SQL = Gdn::SQL();
+
+      // All ancestors will have a TreeLeft and TreeRight that wraps around
+      // the current comment's TreeLeft.
+      // Select a range of useful columns.
+
+      $Data = $SQL->Select('DiscussionID')
+         ->Select('CommentID')->Select('ParentCommentID')
+         ->Select('TreeLeft')->Select('TreeRight')
+         ->Select('DateInserted')
+         ->From('Comment')
+         ->Where('DiscussionID', $Comment->DiscussionID)
+         ->Where('TreeLeft <', $Comment->TreeLeft)
+         ->Where('TreeRight >', $Comment->TreeRight)
+         ->OrderBy('TreeLeft', 'asc')
+         ->Get();
+
+      while ($Comment = $Data->NextRow()) $Comments[] = $Comment;
+
+      return $Comments;
    }
 
    // Pop-up form allowing a comment to be created underneath any existing comment.
@@ -534,13 +586,15 @@ class ReplyTo extends Gdn_Plugin {
 
       // Add a "in reply to" link if the parent is not on the current page.
       if (!empty($Sender->CurrentComment->ReplyToParentURL)) {
-          $Sender->Options .= '<span>'.Anchor(T('In Reply To'), $Sender->CurrentComment->ReplyToParentURL).'</span>';
+          $Sender->Options .= '<span>'
+             . Anchor(T('In Reply To'), $Sender->CurrentComment->ReplyToParentURL, 'ReplyToParentLink')
+             . '</span>';
       }
    }
 
    // Insert the indentation classes into the comment.
    // An addition is made to the WriteComment() function to expose the comment CssClass as
-   // $Sender->CssClassComment.
+   // $Sender->CssClassComment. See readme.txt for details on how to set this up.
 
    public function DiscussionController_BeforeCommentDisplay_handler(&$Sender) {
       if (!isset($Sender->CssClassComment)) return;
