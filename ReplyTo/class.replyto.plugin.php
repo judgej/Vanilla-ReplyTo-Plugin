@@ -640,7 +640,7 @@ class ReplyTo extends Gdn_Plugin {
       if (!Gdn::Session()->UserID) return;
 
       if (isset($Sender->Discussion->PermissionCategoryID)) {
-         $CategoryID = $Sender->Discussion->CategoryPermissionID;
+         $CategoryID = $Sender->Discussion->PermissionCategoryID;
       } else {
          $CategoryID = $Sender->Discussion->CategoryID;
       }
